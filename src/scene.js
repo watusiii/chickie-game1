@@ -167,11 +167,11 @@ export function createScene(container) {
     composer.addPass(renderPass);
 
     const bokehPass = new BokehPass(scene, camera, {
-        focus: 15.0,
-        aperture: 0.0002,
-        maxblur: 0.01,
-        width: container.clientWidth * Math.min(window.devicePixelRatio, 2),  // Match pixel ratio
-        height: container.clientHeight * Math.min(window.devicePixelRatio, 2)  // Match pixel ratio
+        focus: 20.0,
+        aperture: 0.0001,
+        maxblur: 0.005,
+        width: container.clientWidth * Math.min(window.devicePixelRatio, 2),
+        height: container.clientHeight * Math.min(window.devicePixelRatio, 2)
     });
     composer.addPass(bokehPass);
 
@@ -1203,5 +1203,169 @@ export function createScene(container) {
             bullets.push(bullet);
             lastShotTime = currentTime;  // Update last shot time
         }
+    }
+
+    // Add near the top with other game state variables
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    // Add after UI container creation but before event listeners
+    if (isMobile) {
+        // Create mobile controls container
+        const mobileControls = document.createElement('div');
+        mobileControls.style.position = 'fixed';
+        mobileControls.style.bottom = '20px';
+        mobileControls.style.left = '50%';
+        mobileControls.style.transform = 'translateX(-50%)';
+        mobileControls.style.display = 'flex';
+        mobileControls.style.gap = '20px';
+        mobileControls.style.zIndex = '1000';
+
+        // Create joystick container
+        const joystickContainer = document.createElement('div');
+        joystickContainer.style.width = '120px';
+        joystickContainer.style.height = '120px';
+        joystickContainer.style.background = 'rgba(255, 255, 255, 0.2)';
+        joystickContainer.style.borderRadius = '50%';
+        joystickContainer.style.position = 'relative';
+        joystickContainer.style.border = '2px solid rgba(255, 255, 255, 0.3)';
+
+        // Create joystick knob
+        const joystick = document.createElement('div');
+        joystick.style.width = '50px';
+        joystick.style.height = '50px';
+        joystick.style.background = 'rgba(255, 255, 255, 0.5)';
+        joystick.style.borderRadius = '50%';
+        joystick.style.position = 'absolute';
+        joystick.style.left = '50%';
+        joystick.style.top = '50%';
+        joystick.style.transform = 'translate(-50%, -50%)';
+
+        joystickContainer.appendChild(joystick);
+        mobileControls.appendChild(joystickContainer);
+
+        // Create shoot button
+        const shootButton = document.createElement('div');
+        shootButton.style.width = '80px';
+        shootButton.style.height = '80px';
+        shootButton.style.background = 'rgba(255, 0, 0, 0.3)';
+        shootButton.style.borderRadius = '50%';
+        shootButton.style.display = 'flex';
+        shootButton.style.alignItems = 'center';
+        shootButton.style.justifyContent = 'center';
+        shootButton.style.border = '2px solid rgba(255, 0, 0, 0.5)';
+        shootButton.innerHTML = '🎯';
+        shootButton.style.fontSize = '30px';
+        mobileControls.appendChild(shootButton);
+
+        // Create bomb button
+        const bombButton = document.createElement('div');
+        bombButton.style.width = '80px';
+        bombButton.style.height = '80px';
+        bombButton.style.background = 'rgba(255, 255, 0, 0.3)';
+        bombButton.style.borderRadius = '50%';
+        bombButton.style.display = 'flex';
+        bombButton.style.alignItems = 'center';
+        bombButton.style.justifyContent = 'center';
+        bombButton.style.border = '2px solid rgba(255, 255, 0, 0.5)';
+        bombButton.innerHTML = '💣';
+        bombButton.style.fontSize = '30px';
+        mobileControls.appendChild(bombButton);
+
+        container.appendChild(mobileControls);
+
+        // Joystick variables
+        let joystickActive = false;
+        let joystickCenter = { x: 0, y: 0 };
+        let joystickPosition = { x: 0, y: 0 };
+
+        // Joystick touch handlers
+        joystickContainer.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            const rect = joystickContainer.getBoundingClientRect();
+            joystickCenter.x = rect.left + rect.width / 2;
+            joystickCenter.y = rect.top + rect.height / 2;
+            joystickActive = true;
+            updateJoystickPosition(touch);
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (joystickActive) {
+                updateJoystickPosition(e.touches[0]);
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            if (joystickActive) {
+                joystickActive = false;
+                joystick.style.left = '50%';
+                joystick.style.top = '50%';
+                joystickPosition = { x: 0, y: 0 };
+            }
+        });
+
+        function updateJoystickPosition(touch) {
+            const dx = touch.clientX - joystickCenter.x;
+            const dy = touch.clientY - joystickCenter.y;
+            const distance = Math.min(35, Math.sqrt(dx * dx + dy * dy));
+            const angle = Math.atan2(dy, dx);
+            
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            
+            joystick.style.left = `calc(50% + ${x}px)`;
+            joystick.style.top = `calc(50% + ${y}px)`;
+            
+            joystickPosition.x = x / 35;
+            joystickPosition.y = y / 35;
+        }
+
+        // Shoot button handler
+        shootButton.addEventListener('touchstart', () => {
+            isMouseDown = true;
+            lastMouseEvent = { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 };
+        });
+
+        shootButton.addEventListener('touchend', () => {
+            isMouseDown = false;
+            lastMouseEvent = null;
+        });
+
+        // Bomb button handler
+        bombButton.addEventListener('touchstart', () => {
+            if (chickie && eggs.length < maxEggs) {
+                createBomb(chickie.position.clone());
+                updateUI();
+            }
+        });
+
+        // Update updateChickiePosition to use joystick input on mobile
+        const originalUpdateChickiePosition = updateChickiePosition;
+        updateChickiePosition = function() {
+            if (!chickie || isGameOver || !gameActive) return;
+
+            if (isMobile && joystickActive) {
+                const moveVector = new THREE.Vector3(0, 0, 0);
+                const forward = new THREE.Vector3(-1, 0, -1).normalize();
+                const right = new THREE.Vector3(1, 0, -1).normalize();
+
+                moveVector.add(forward.multiplyScalar(-joystickPosition.y));
+                moveVector.add(right.multiplyScalar(joystickPosition.x));
+
+                if (moveVector.length() > 0) {
+                    moveVector.normalize().multiplyScalar(moveSpeed);
+
+                    const nextX = chickie.position.x + moveVector.x;
+                    const nextZ = chickie.position.z + moveVector.z;
+
+                    const nextPlotType = getPlotTypeAt(nextX, nextZ);
+                    if (nextPlotType !== 'water') {
+                        chickie.position.x = nextX;
+                        chickie.position.z = nextZ;
+                    }
+                }
+            } else {
+                originalUpdateChickiePosition();
+            }
+        };
     }
 } 
