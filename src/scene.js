@@ -1,11 +1,26 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 
 export function createScene(container) {
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
+
+    // Add this code to handle the start button
+    const titleScreen = document.getElementById('title-screen');
+    const startButton = document.getElementById('start-button');
+    let gameActive = false;  // Start with game paused
+
+    // Hide the title screen and start the game when the button is clicked
+    startButton.addEventListener('click', () => {
+        titleScreen.style.display = 'none';
+        gameActive = true;  // Start the game when button is clicked
+        updateUI();  // Add this line to initialize UI
+    });
 
     // Game state variables - Move all to top
     const spawnDistance = 1.5;    // Distance from edge to spawn new plots
@@ -14,15 +29,12 @@ export function createScene(container) {
     let chickie = null;
     const enemySpeed = 0.03;
     const moveSpeed = 0.05;
-    let targetPosition = null;
     let isGameOver = false;
-    let gameActive = true;
     let score = 0;
     let eggs = [];
     const maxEggs = 5;
     const bombTimer = 3000;
     let enemies = [];  // This is our only enemy tracking now
-    let ammo = 0;
     const bulletSpeed = 0.2;
     const bullets = [];
 
@@ -51,36 +63,27 @@ export function createScene(container) {
 
     // Geometries and materials - Update these with enhanced properties
     const bombGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-    const bombMaterial = new THREE.MeshStandardMaterial({ 
+    const bombMaterial = new THREE.MeshBasicMaterial({
         color: 0xFF0000,
-        emissive: 0xFF0000,
-        emissiveIntensity: 0.5
     });
 
     const explosionGeometry = new THREE.SphereGeometry(1, 16, 16);
-    const explosionMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xffff00,
-        emissive: 0xffaa00,
-        emissiveIntensity: 1,
+    const explosionMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFFFF00,
         transparent: true,
         opacity: 0.7
     });
 
     const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const bulletMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x00ff44,
-        emissive: 0x00ff44,
-        emissiveIntensity: 1
+    const bulletMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00FF44,
     });
-    
+
     const powerupGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-    const powerupMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0x00ffff,
-        emissive: 0x00ffff,
-        emissiveIntensity: 0.5,
+    const powerupMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00FFFF,
         transparent: true,
         opacity: 0.8,
-        shininess: 100
     });
 
     // Camera setup
@@ -100,17 +103,23 @@ export function createScene(container) {
     camera.lookAt(0, 0, 0);
 
     // Renderer setup
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ 
+        antialias: true,  // Enable anti-aliasing
+        powerPreference: "high-performance",  // Request high performance mode
+        stencil: false,   // Disable stencil buffer if not needed
+        depth: true,      // Keep depth buffer for 3D
+        alpha: false      // Disable alpha since we have a background
+    });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));  // Limit pixel ratio for performance
     container.appendChild(renderer.domElement);
 
-    // Lighting setup for bright, even illumination
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
+    // Lighting setup for much brighter illumination
+    const ambientLight = new THREE.AmbientLight(0xffffff, 8.0);  // Increased from 3.5 to 8.0
     scene.add(ambientLight);
 
     // Bright main light from above
-    const mainLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 6.0);  // Increased from 4.0 to 6.0
     mainLight.position.set(5, 15, 5);
     scene.add(mainLight);
 
@@ -118,17 +127,17 @@ export function createScene(container) {
     const hemisphereLight = new THREE.HemisphereLight(
         0xffffff, // Sky color
         0xffffff, // Ground color
-        1.5       // Intensity
+        4.0       // Increased from 2.0 to 4.0
     );
     scene.add(hemisphereLight);
 
     // Bright fill light
-    const fillLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 3.0);  // Increased from 2.0 to 3.0
     fillLight.position.set(-5, 10, -5);
     scene.add(fillLight);
 
     // Bright front light
-    const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const frontLight = new THREE.DirectionalLight(0xffffff, 2.5);  // Increased from 1.8 to 2.5
     frontLight.position.set(0, 8, 12);
     scene.add(frontLight);
 
@@ -151,21 +160,41 @@ export function createScene(container) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enabled = false;
 
-    // Function declarations - Move all functions here
+    // Move this code BEFORE the animate function definition
+    // After renderer setup but before animate function
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bokehPass = new BokehPass(scene, camera, {
+        focus: 15.0,
+        aperture: 0.0002,
+        maxblur: 0.01,
+        width: container.clientWidth * Math.min(window.devicePixelRatio, 2),  // Match pixel ratio
+        height: container.clientHeight * Math.min(window.devicePixelRatio, 2)  // Match pixel ratio
+    });
+    composer.addPass(bokehPass);
+
+    // Then define the animate function
     function animate() {
         requestAnimationFrame(animate);
+        if (!gameActive) {
+            composer.render();
+            return;
+        }
         updateChickiePosition();
+        updateChickieRotation();
         updateEnemyPositions();
         updateBullets();
-        checkPowerupCollection();
         checkAndAddPlots();
         updateCamera();
-        renderer.render(scene, camera);
+        handleShooting();
+        composer.render();
     }
 
     // Load models
     const loader = new GLTFLoader();
-    
+
     // Add these helper functions at the top with other functions
     function createDebugBox(object) {
         const box = new THREE.Box3().setFromObject(object);
@@ -201,7 +230,7 @@ export function createScene(container) {
         scene.add(land);
         land.userData.plotType = 'forest';
         plots.set(getPlotKey(0, 0), land);
-        
+
         // Measure the actual size
         const size = createDebugBox(land);
         console.log('Measured plot size:', size);
@@ -215,6 +244,12 @@ export function createScene(container) {
         chickie = gltf.scene;
         chickie.scale.set(0.5, 0.5, 0.5);
         chickie.position.set(2, 0.7, 2);  // Center of first plot (half of plotSize)
+        
+        // Add point light to player - reduced intensity from 1.5 to 0.8
+        const chickieLight = new THREE.PointLight(0xffffaa, 0.8, 4);
+        chickieLight.position.set(0, -0.5, 0);
+        chickie.add(chickieLight);
+        
         scene.add(chickie);
 
         // Add initial powerup for testing
@@ -226,14 +261,14 @@ export function createScene(container) {
         // Make powerup float and spin
         const startY = testPowerup.position.y;
         const startTime = Date.now();
-        
+
         function animatePowerup() {
             if (!scene.children.includes(testPowerup)) return;
-            
+
             const time = Date.now() - startTime;
             testPowerup.position.y = startY + Math.sin(time * 0.003) * 0.2;
             testPowerup.rotation.y += 0.02;
-            
+
             requestAnimationFrame(animatePowerup);
         }
         animatePowerup();
@@ -251,47 +286,13 @@ export function createScene(container) {
 
         raycaster.setFromCamera(mouse, camera);
 
-        // Check for intersections with enemies and their children
-        const intersects = raycaster.intersectObjects(enemies, true); // true to check children
-        if (intersects.length > 0 && ammo > 0) {
-            // Find the root enemy object (parent)
-            let targetEnemy = intersects[0].object;
-            while (targetEnemy.parent && !enemies.includes(targetEnemy)) {
-                targetEnemy = targetEnemy.parent;
-            }
-            
-            // Shoot at the enemy
-            shootBulletAt(targetEnemy);
-            return;
-        }
-
         // Check for bombs
         const bombIntersects = raycaster.intersectObjects(eggs);
         if (bombIntersects.length > 0) {
             const bomb = bombIntersects[0].object;
-            if (bomb.userData.isBomb && 
-                Date.now() - bomb.userData.plantTime > 1000) {
+            if (bomb.userData.isBomb && Date.now() - bomb.userData.plantTime > 1000) {
                 collectEgg(bomb);
                 updateUI();
-                return;
-            }
-        }
-
-        // Handle movement if no enemy was clicked
-        if (raycaster.ray.intersectPlane(clickPlane, intersectPoint)) {
-            const plotX = Math.floor(intersectPoint.x / plotSize);
-            const plotZ = Math.floor(intersectPoint.z / plotSize);
-            
-            if (hasPlot(plotX, plotZ)) {
-                const plotType = getPlotTypeAt(intersectPoint.x, intersectPoint.z);
-                if (plotType === 'water') {
-                    console.log("Can't move on water!");
-                    return;
-                }
-
-                if (eggs.length < maxEggs) {
-                    targetPosition = intersectPoint.clone();
-                }
             }
         }
     });
@@ -303,7 +304,9 @@ export function createScene(container) {
         camera.top = frustumSize / 2;
         camera.bottom = frustumSize / -2;
         camera.updateProjectionMatrix();
+        
         renderer.setSize(container.clientWidth, container.clientHeight);
+        composer.setSize(container.clientWidth, container.clientHeight);
     });
 
     // Add game over check
@@ -396,13 +399,6 @@ export function createScene(container) {
                         <div class="stat-value">${eggs.length}/${maxEggs}</div>
                     </div>
                 </div>
-                <div class="stat-row" style="animation-delay: 0.2s;">
-                    <div class="icon">🎯</div>
-                    <div>
-                        <div>AMMO</div>
-                        <div class="stat-value">${ammo}</div>
-                    </div>
-                </div>
                 <div class="stat-row" style="animation-delay: 0.4s;">
                     <div class="icon">⭐</div>
                     <div>
@@ -416,108 +412,97 @@ export function createScene(container) {
 
     // Update game over screen with more dynamic styling
     function showGameOver(won) {
+        // Remove any existing game over screen
+        const existingGameOver = document.querySelector('.game-over-container');
+        if (existingGameOver) {
+            existingGameOver.remove();
+        }
+
         const gameOverDiv = document.createElement('div');
-        gameOverDiv.style.position = 'absolute';
-        gameOverDiv.style.top = '50%';
-        gameOverDiv.style.left = '50%';
-        gameOverDiv.style.transform = 'translate(-50%, -50%)';
-        gameOverDiv.style.background = 'linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(20, 20, 20, 0.95))';
-        gameOverDiv.style.padding = '40px 60px';
-        gameOverDiv.style.borderRadius = '20px';
-        gameOverDiv.style.color = 'white';
-        gameOverDiv.style.fontFamily = '"Press Start 2P", "Segoe UI", Roboto, Arial, sans-serif';
-        gameOverDiv.style.fontSize = '24px';
-        gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.backdropFilter = 'blur(15px)';
-        gameOverDiv.style.border = '3px solid rgba(255, 255, 255, 0.2)';
-        gameOverDiv.style.boxShadow = '0 0 40px rgba(0, 0, 0, 0.6)';
-        gameOverDiv.style.animation = 'fadeIn 0.5s ease-out';
+        gameOverDiv.className = 'game-over-container';
+
+        // Add base styles
+        const styles = `
+            .game-over-container {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(20, 20, 20, 0.98));
+                padding: 40px 60px;
+                border-radius: 20px;
+                color: white;
+                text-align: center;
+                backdrop-filter: blur(10px);
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+                min-width: 300px;
+                z-index: 1000;
+            }
+            .game-over-title {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 32px;
+                margin-bottom: 20px;
+                color: ${won ? '#FFD700' : '#FF4444'};
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            }
+            .game-over-score {
+                font-family: 'Righteous', sans-serif;
+                font-size: 24px;
+                color: #FFD700;
+                margin: 20px 0;
+                text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            }
+            .game-over-message {
+                font-family: 'Righteous', sans-serif;
+                font-size: 20px;
+                color: #AAA;
+                margin: 15px 0;
+            }
+            .replay-button {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 16px;
+                padding: 15px 30px;
+                margin-top: 20px;
+                background: linear-gradient(90deg, #ff6b6b, #ff4757);
+                border: none;
+                border-radius: 10px;
+                color: white;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            }
+            .replay-button:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4);
+                filter: brightness(1.1);
+            }
+            .replay-button:active {
+                transform: translateY(1px);
+            }
+        `;
+
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = styles;
+        document.head.appendChild(styleSheet);
 
         gameOverDiv.innerHTML = `
-            <style>
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translate(-50%, -40%); }
-                    to { opacity: 1; transform: translate(-50%, -50%); }
-                }
-                @keyframes glow {
-                    0% { text-shadow: 0 0 5px #fff; }
-                    50% { text-shadow: 0 0 20px #fff, 0 0 30px #ff4da6; }
-                    100% { text-shadow: 0 0 5px #fff; }
-                }
-                @keyframes bounce {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(-10px); }
-                }
-                @keyframes shake {
-                    0%, 100% { transform: translateX(0); }
-                    25% { transform: translateX(-5px); }
-                    75% { transform: translateX(5px); }
-                }
-                .game-over-title {
-                    font-size: 36px;
-                    margin-bottom: 30px;
-                    animation: glow 2s infinite;
-                }
-                .score-display {
-                    font-size: 28px;
-                    color: #FFD700;
-                    margin-bottom: 40px;
-                    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-                    animation: bounce 2s infinite;
-                }
-                .replay-button {
-                    font-size: 20px;
-                    padding: 20px 40px;
-                    background: linear-gradient(45deg, #ff6b6b, #ff4757);
-                    border: none;
-                    border-radius: 15px;
-                    color: white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    font-family: inherit;
-                    text-transform: uppercase;
-                    letter-spacing: 2px;
-                    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-                    position: relative;
-                    overflow: hidden;
-                }
-                .replay-button:hover {
-                    transform: translateY(-3px) scale(1.05);
-                    box-shadow: 0 7px 25px rgba(0, 0, 0, 0.4);
-                    animation: shake 0.5s ease-in-out;
-                }
-                .replay-button::before {
-                    content: '';
-                    position: absolute;
-                    top: -50%;
-                    left: -50%;
-                    width: 200%;
-                    height: 200%;
-                    background: linear-gradient(
-                        45deg,
-                        transparent,
-                        rgba(255, 255, 255, 0.1),
-                        transparent
-                    );
-                    transform: rotate(45deg);
-                    animation: shine 3s infinite;
-                }
-                @keyframes shine {
-                    0% { transform: translateX(-100%) rotate(45deg); }
-                    100% { transform: translateX(100%) rotate(45deg); }
-                }
-            </style>
             <div class="game-over-title">
                 ${won ? '🏆 VICTORY!' : '💀 GAME OVER'}
             </div>
-            <div class="score-display">
+            <div class="game-over-message">
+                ${won ? 'Congratulations!' : 'Better luck next time!'}
+            </div>
+            <div class="game-over-score">
                 FINAL SCORE: ${score}
             </div>
             <button class="replay-button" onclick="location.reload()">
                 ⚡ Play Again ⚡
             </button>
         `;
-        container.appendChild(gameOverDiv);
+
+        document.body.appendChild(gameOverDiv);
     }
 
     // Function to collect an egg
@@ -525,43 +510,7 @@ export function createScene(container) {
         scene.remove(egg);
         eggs = eggs.filter(e => e !== egg);
         score += 1;
-        movesLeft += 2;  // Bonus moves for collecting eggs
         updateUI();
-    }
-
-    // Modify updateChickiePosition to lay eggs when stopping
-    function updateChickiePosition() {
-        if (!chickie || !targetPosition || isGameOver) return;
-
-        const direction = new THREE.Vector3();
-        direction.subVectors(targetPosition, chickie.position);
-        direction.y = 0;
-
-        if (direction.length() < 0.1) {
-            if (eggs.length < maxEggs) {
-                createBomb(chickie.position.clone());
-            }
-            targetPosition = null;
-            return;
-        }
-
-        // Calculate next position
-        const nextX = chickie.position.x + direction.normalize().x * moveSpeed;
-        const nextZ = chickie.position.z + direction.z * moveSpeed;
-
-        // Check if next position would be on water
-        const nextPlotType = getPlotTypeAt(nextX, nextZ);
-        if (nextPlotType === 'water') {
-            targetPosition = null;
-            return;
-        }
-
-        // Move if not water
-        chickie.position.x = nextX;
-        chickie.position.z = nextZ;
-
-        const angle = Math.atan2(direction.x, direction.z);
-        chickie.rotation.y = angle;
     }
 
     // Function to create an egg at a position
@@ -571,9 +520,9 @@ export function createScene(container) {
         egg.scale.set(1, 1.3, 1);  // Make it slightly egg-shaped
         scene.add(egg);
         eggs.push(egg);
-        
+
         // Make egg clickable
-        egg.userData = { 
+        egg.userData = {
             isEgg: true,
             clickTime: Date.now()
         };
@@ -585,8 +534,8 @@ export function createScene(container) {
         bomb.position.set(position.x, 0.2, position.z);
         scene.add(bomb);
         eggs.push(bomb);
-        
-        bomb.userData = { 
+
+        bomb.userData = {
             isBomb: true,
             plantTime: Date.now()
         };
@@ -611,11 +560,11 @@ export function createScene(container) {
                 // Remove hit enemy
                 scene.remove(enemy);
                 enemies.splice(index, 1);
-                
+
                 // Spawn two new enemies
                 spawnEnemy();
                 spawnEnemy();
-                
+
                 score += 10;
             }
         });
@@ -638,15 +587,6 @@ export function createScene(container) {
         enemyChickie.position.z = Math.sin(angle) * distance;
     }
 
-    // Update UI to show score
-    function updateUI() {
-        uiContainer.innerHTML = `
-            Bombs: ${eggs.length}/${maxEggs}<br>
-            Ammo: ${ammo}<br>
-            Score: ${score}
-        `;
-    }
-
     // Modify checkGameOver to include win/lose condition
     function gameOver(won) {
         if (!won && chickie) {
@@ -659,60 +599,97 @@ export function createScene(container) {
 
     // Update showGameOver to show win/lose message
     function showGameOver(won) {
+        // Remove any existing game over screen
+        const existingGameOver = document.querySelector('.game-over-container');
+        if (existingGameOver) {
+            existingGameOver.remove();
+        }
+
         const gameOverDiv = document.createElement('div');
-        gameOverDiv.style.position = 'absolute';
-        gameOverDiv.style.top = '50%';
-        gameOverDiv.style.left = '50%';
-        gameOverDiv.style.transform = 'translate(-50%, -50%)';
-        gameOverDiv.style.color = 'white';
-        gameOverDiv.style.fontFamily = 'Arial, sans-serif';
-        gameOverDiv.style.fontSize = '32px';
-        gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.textShadow = '2px 2px 2px rgba(0,0,0,0.5)';
+        gameOverDiv.className = 'game-over-container';
+
+        // Add base styles
+        const styles = `
+            .game-over-container {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(20, 20, 20, 0.98));
+                padding: 40px 60px;
+                border-radius: 20px;
+                color: white;
+                text-align: center;
+                backdrop-filter: blur(10px);
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+                min-width: 300px;
+                z-index: 1000;
+            }
+            .game-over-title {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 32px;
+                margin-bottom: 20px;
+                color: ${won ? '#FFD700' : '#FF4444'};
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            }
+            .game-over-score {
+                font-family: 'Righteous', sans-serif;
+                font-size: 24px;
+                color: #FFD700;
+                margin: 20px 0;
+                text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            }
+            .game-over-message {
+                font-family: 'Righteous', sans-serif;
+                font-size: 20px;
+                color: #AAA;
+                margin: 15px 0;
+            }
+            .replay-button {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 16px;
+                padding: 15px 30px;
+                margin-top: 20px;
+                background: linear-gradient(90deg, #ff6b6b, #ff4757);
+                border: none;
+                border-radius: 10px;
+                color: white;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            }
+            .replay-button:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4);
+                filter: brightness(1.1);
+            }
+            .replay-button:active {
+                transform: translateY(1px);
+            }
+        `;
+
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = styles;
+        document.head.appendChild(styleSheet);
+
         gameOverDiv.innerHTML = `
-            Game Over!<br>
-            ${won ? 'You Win!' : 'You were caught!'}<br>
-            Final Score: ${score}<br>
-            <button onclick="location.reload()" style="font-size: 24px; padding: 10px 20px; margin-top: 20px; cursor: pointer;">
-                Play Again
+            <div class="game-over-title">
+                ${won ? '🏆 VICTORY!' : '💀 GAME OVER'}
+            </div>
+            <div class="game-over-message">
+                ${won ? 'Congratulations!' : 'Better luck next time!'}
+            </div>
+            <div class="game-over-score">
+                FINAL SCORE: ${score}
+            </div>
+            <button class="replay-button" onclick="location.reload()">
+                ⚡ Play Again ⚡
             </button>
         `;
-        container.appendChild(gameOverDiv);
-    }
 
-    // Modify updateChickiePosition to create bombs instead of eggs
-    function updateChickiePosition() {
-        if (!chickie || !targetPosition || isGameOver) return;
-
-        const direction = new THREE.Vector3();
-        direction.subVectors(targetPosition, chickie.position);
-        direction.y = 0;
-
-        if (direction.length() < 0.1) {
-            if (eggs.length < maxEggs) {
-                createBomb(chickie.position.clone());
-            }
-            targetPosition = null;
-            return;
-        }
-
-        // Calculate next position
-        const nextX = chickie.position.x + direction.normalize().x * moveSpeed;
-        const nextZ = chickie.position.z + direction.z * moveSpeed;
-
-        // Check if next position would be on water
-        const nextPlotType = getPlotTypeAt(nextX, nextZ);
-        if (nextPlotType === 'water') {
-            targetPosition = null;
-            return;
-        }
-
-        // Move if not water
-        chickie.position.x = nextX;
-        chickie.position.z = nextZ;
-
-        const angle = Math.atan2(direction.x, direction.z);
-        chickie.rotation.y = angle;
+        document.body.appendChild(gameOverDiv);
     }
 
     // Function to generate position key for plots map
@@ -736,16 +713,16 @@ export function createScene(container) {
         const plotType = getRandomPlotType();
         loader.load(`./models/${plotType}.glb`, (gltf) => {
             const newPlot = gltf.scene.clone();
-            
+
             // Position exactly at grid coordinates using measured size
             newPlot.position.set(
-                x * plotSize, 
+                x * plotSize,
                 -2,
                 z * plotSize
             );
 
             newPlot.scale.set(1, 1, 1);
-            
+
             scene.add(newPlot);
             plots.set(plotKey, newPlot);
             newPlot.userData.plotType = plotType;
@@ -759,7 +736,7 @@ export function createScene(container) {
             function animatePlot() {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                
+
                 newPlot.position.y = startY + (targetY - startY) * progress;
 
                 if (progress < 1) {
@@ -812,10 +789,10 @@ export function createScene(container) {
     // Update camera to follow player
     function updateCamera() {
         if (!chickie) return;
-        
+
         const targetX = chickie.position.x;
         const targetZ = chickie.position.z;
-        
+
         camera.position.set(
             targetX + 15,
             15,
@@ -879,7 +856,7 @@ export function createScene(container) {
         loader.load('./models/7.glb', (gltf) => {
             const newEnemy = gltf.scene.clone();
             newEnemy.scale.set(0.5, 0.5, 0.5);
-            
+
             // Spawn at random position around the player
             const angle = Math.random() * Math.PI * 2;
             const distance = 8;  // Distance from player
@@ -888,7 +865,7 @@ export function createScene(container) {
                 0.7,
                 chickie.position.z + Math.sin(angle) * distance
             );
-            
+
             // Make enemy red
             newEnemy.traverse((child) => {
                 if (child.isMesh) {
@@ -896,77 +873,10 @@ export function createScene(container) {
                     child.material.color.setHex(0xFF0000);
                 }
             });
-            
+
             scene.add(newEnemy);
             enemies.push(newEnemy);
         });
-    }
-
-    // Function to spawn ammo powerup
-    function spawnAmmoPowerup() {
-        const powerup = new THREE.Mesh(powerupGeometry, powerupMaterial);
-        
-        // Random position within current plot
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * 2 + 2; // Between 2-4 units from player
-        powerup.position.set(
-            chickie.position.x + Math.cos(angle) * distance,
-            0.5,
-            chickie.position.z + Math.sin(angle) * distance
-        );
-
-        powerup.userData.isPowerup = true;
-        scene.add(powerup);
-
-        // Make powerup float and spin
-        const startY = powerup.position.y;
-        const startTime = Date.now();
-        
-        function animatePowerup() {
-            if (!scene.children.includes(powerup)) return;
-            
-            const time = Date.now() - startTime;
-            powerup.position.y = startY + Math.sin(time * 0.003) * 0.2;
-            powerup.rotation.y += 0.02;
-            
-            requestAnimationFrame(animatePowerup);
-        }
-        animatePowerup();
-
-        // Remove powerup after some time if not collected
-        setTimeout(() => {
-            if (scene.children.includes(powerup)) {
-                scene.remove(powerup);
-            }
-        }, 10000);
-    }
-
-    // Spawn powerups periodically
-    setInterval(spawnAmmoPowerup, 15000);
-
-    // Function to shoot bullet
-    function shootBullet() {
-        if (ammo <= 0 || !chickie) return;
-
-        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
-        bullet.position.copy(chickie.position);
-        bullet.position.y = 0.5;
-
-        // Get click point for direction
-        if (raycaster.ray.intersectPlane(clickPlane, intersectPoint)) {
-            const direction = new THREE.Vector3();
-            direction.subVectors(intersectPoint, chickie.position);
-            direction.y = 0;
-            direction.normalize();
-
-            bullet.userData.direction = direction;
-            bullet.userData.spawnTime = Date.now();
-
-            scene.add(bullet);
-            bullets.push(bullet);
-            ammo--;
-            updateUI();
-        }
     }
 
     // Update bullet movement
@@ -981,21 +891,22 @@ export function createScene(container) {
                 if (bullet.position.distanceTo(enemy.position) < 0.5) {
                     // Create blood effect at hit location
                     createBloodEffect(enemy.position.clone(), 1);
-                    
-                    // Remove enemy and bullet
+
+                    // Remove enemy and bullet (light will be removed automatically as it's a child of bullet)
                     scene.remove(enemy);
                     enemies.splice(enemyIndex, 1);
                     scene.remove(bullet);
                     bullets.splice(i, 1);
-                    score += 5;
                     
-                    // Spawn two new enemies
+                    score += 10;
+                    updateUI();
+
                     spawnEnemy();
                     spawnEnemy();
                 }
             });
 
-            // Remove old bullets
+            // Remove old bullets (light will be removed automatically as it's a child of bullet)
             if (Date.now() - bullet.userData.spawnTime > 3000) {
                 scene.remove(bullet);
                 bullets.splice(i, 1);
@@ -1006,7 +917,7 @@ export function createScene(container) {
     // Add this function to check for nearby powerups
     function checkPowerupCollection() {
         if (!chickie) return;
-        
+
         scene.children.forEach(object => {
             if (object.userData.isPowerup) {
                 const distance = object.position.distanceTo(chickie.position);
@@ -1018,33 +929,6 @@ export function createScene(container) {
             }
         });
     }
-
-    // Update shooting function to target specific enemy
-    function shootBulletAt(targetEnemy) {
-        if (ammo <= 0 || !chickie) return;
-
-        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
-        // Start bullet at chicken position
-        bullet.position.copy(chickie.position);
-        bullet.position.y = 0.5;
-
-        // Calculate direction to enemy
-        const direction = new THREE.Vector3();
-        direction.subVectors(targetEnemy.position, chickie.position);
-        direction.y = 0; // Keep bullets level
-        direction.normalize();
-
-        bullet.userData.direction = direction;
-        bullet.userData.spawnTime = Date.now();
-        bullet.userData.targetEnemy = targetEnemy; // Store target for better tracking
-
-        scene.add(bullet);
-        bullets.push(bullet);
-        ammo--;
-        updateUI();
-    }
-
-
 
     // Add particle effect for explosions
     function createExplosionParticles(position) {
@@ -1058,7 +942,7 @@ export function createScene(container) {
         for (let i = 0; i < particleCount; i++) {
             const particle = new THREE.Mesh(geometry, material);
             particle.position.copy(position);
-            
+
             const angle = Math.random() * Math.PI * 2;
             const speed = Math.random() * 0.1 + 0.05;
             particle.userData.velocity = new THREE.Vector3(
@@ -1091,7 +975,7 @@ export function createScene(container) {
     // Add blood particle materials and settings
     const bloodParticleGeometry = new THREE.SphereGeometry(0.05, 8, 8);
     const bloodParticleMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff0000,
+        color: 0xFF0000,
         transparent: true,
         opacity: 0.8
     });
@@ -1104,12 +988,12 @@ export function createScene(container) {
         for (let i = 0; i < particleCount; i++) {
             const particle = new THREE.Mesh(bloodParticleGeometry, bloodParticleMaterial.clone());
             particle.position.copy(position);
-            
+
             // Random spread in all directions
             const angle = Math.random() * Math.PI * 2;
             const upwardBias = Math.random() * 0.15; // Upward spread
             const speed = (Math.random() * 0.2 + 0.1) * intensity;
-            
+
             particle.userData.velocity = new THREE.Vector3(
                 Math.cos(angle) * speed,
                 upwardBias + Math.random() * 0.1,
@@ -1136,14 +1020,14 @@ export function createScene(container) {
                 // Update position
                 particle.position.add(particle.userData.velocity);
                 particle.userData.velocity.y -= 0.005; // Gravity
-                
+
                 // Rotate particle
                 particle.rotation.x += particle.userData.rotationSpeed;
                 particle.rotation.z += particle.userData.rotationSpeed;
-                
+
                 // Fade out
                 particle.material.opacity = 0.8 * (1 - (elapsed / 1000));
-                
+
                 // Scale down over time
                 const scale = 1 - (elapsed / 1000) * 0.5;
                 particle.scale.set(scale, scale, scale);
@@ -1152,5 +1036,172 @@ export function createScene(container) {
             requestAnimationFrame(animateBlood);
         }
         animateBlood();
+    }
+
+    // Add new event listener for 'E' key
+    window.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() === 'e' && gameActive && !isGameOver) {
+            if (chickie && eggs.length < maxEggs) {
+                createBomb(chickie.position.clone());
+                updateUI();
+            }
+        }
+    });
+
+    // Update the keys object to track WASD keys
+    const keys = {
+        w: false,
+        a: false,
+        s: false,
+        d: false
+    };
+
+    // Add these event listeners for WASD movement
+    window.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() in keys) {
+            keys[event.key.toLowerCase()] = true;
+        }
+    });
+
+    window.addEventListener('keyup', (event) => {
+        if (event.key.toLowerCase() in keys) {
+            keys[event.key.toLowerCase()] = false;
+        }
+    });
+
+    // Add this function to update chicken rotation based on mouse position
+    function updateChickieRotation() {
+        if (!chickie || !lastMouseEvent) return;
+
+        mouse.x = (lastMouseEvent.clientX / container.clientWidth) * 2 - 1;
+        mouse.y = -(lastMouseEvent.clientY / container.clientHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+
+        // Get intersection with ground plane for direction
+        if (raycaster.ray.intersectPlane(clickPlane, intersectPoint)) {
+            const direction = new THREE.Vector3();
+            direction.subVectors(intersectPoint, chickie.position);
+            direction.y = 0;
+            
+            // Update rotation to face mouse position
+            const angle = Math.atan2(direction.x, direction.z);
+            chickie.rotation.y = angle;
+        }
+    }
+
+    // Update the updateChickiePosition function to remove rotation code
+    function updateChickiePosition() {
+        if (!chickie || isGameOver || !gameActive) return;
+
+        const moveVector = new THREE.Vector3(0, 0, 0);
+        
+        // Create camera direction vectors
+        const forward = new THREE.Vector3();
+        const right = new THREE.Vector3();
+        
+        // Get camera's forward and right directions
+        forward.set(-1, 0, -1).normalize();
+        right.set(1, 0, -1).normalize();
+
+        // Add movement based on WASD input relative to camera view
+        if (keys.w) {
+            moveVector.add(forward);
+        }
+        if (keys.s) {
+            moveVector.sub(forward);
+        }
+        if (keys.d) {
+            moveVector.add(right);
+        }
+        if (keys.a) {
+            moveVector.sub(right);
+        }
+
+        if (moveVector.length() === 0) return;
+
+        // Normalize diagonal movement
+        moveVector.normalize().multiplyScalar(moveSpeed);
+
+        // Calculate next position
+        const nextX = chickie.position.x + moveVector.x;
+        const nextZ = chickie.position.z + moveVector.z;
+
+        // Check if next position would be on water
+        const nextPlotType = getPlotTypeAt(nextX, nextZ);
+        if (nextPlotType === 'water') return;
+
+        // Move if not water
+        chickie.position.x = nextX;
+        chickie.position.z = nextZ;
+    }
+
+    // Add mousemove event listener to track mouse position even when not shooting
+    container.addEventListener('mousemove', (event) => {
+        lastMouseEvent = event;  // Always update mouse position
+    });
+
+    // Add these variables at the top with other game state variables
+    let isMouseDown = false;
+    let lastMouseEvent = null;  // Add this to store the last mouse event
+    let lastShotTime = 0;  // Add this to track when we last fired
+    const fireRate = 200;  // Changed from 300 to 200 - faster shooting
+
+    // Update the container event listeners to track mouse state and position
+    container.addEventListener('mousedown', (event) => {
+        isMouseDown = true;
+        lastMouseEvent = event;  // Store the event
+    });
+
+    container.addEventListener('mousemove', (event) => {
+        if (isMouseDown) {
+            lastMouseEvent = event;  // Update stored event while dragging
+        }
+    });
+
+    container.addEventListener('mouseup', () => {
+        isMouseDown = false;
+        lastMouseEvent = null;  // Clear stored event
+    });
+
+    container.addEventListener('mouseleave', () => {
+        isMouseDown = false;
+        lastMouseEvent = null;  // Clear stored event
+    });
+
+    // Add this function to handle continuous shooting
+    function handleShooting() {
+        if (!isMouseDown || !gameActive || !chickie || !lastMouseEvent) return;
+
+        // Check if enough time has passed since last shot
+        const currentTime = Date.now();
+        if (currentTime - lastShotTime < fireRate) return;
+        
+        mouse.x = (lastMouseEvent.clientX / container.clientWidth) * 2 - 1;
+        mouse.y = -(lastMouseEvent.clientY / container.clientHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+
+        // Get intersection with ground plane for direction
+        if (raycaster.ray.intersectPlane(clickPlane, intersectPoint)) {
+            const direction = new THREE.Vector3();
+            direction.subVectors(intersectPoint, chickie.position);
+            direction.y = 0; // Keep bullets level
+            direction.normalize();
+
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            bullet.position.copy(chickie.position);
+            bullet.position.y = 0.5;
+            bullet.userData.direction = direction;
+            bullet.userData.spawnTime = Date.now();
+
+            // Add point light to bullet - reduced intensity from 2 to 1
+            const bulletLight = new THREE.PointLight(0x00ff44, 1, 3);
+            bullet.add(bulletLight);
+
+            scene.add(bullet);
+            bullets.push(bullet);
+            lastShotTime = currentTime;  // Update last shot time
+        }
     }
 } 

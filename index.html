@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <style>
         #scene-container {
             width: 100vw;
@@ -8,8 +9,20 @@
         }
         body {
             margin: 0;
+            /* Disable text selection */
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            cursor: default;
+        }
+        /* Disable highlighting on buttons and other elements */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Righteous&display=swap" rel="stylesheet">
     <!-- Import Three.js first -->
     <script async src="https://unpkg.com/es-module-shims/dist/es-module-shims.js"></script>
     <script type="importmap">
@@ -23,7 +36,72 @@
     <!-- Then load our main script -->
     <script type="module" src="src/main.js"></script>
 </head>
-<body>
+<body oncontextmenu="return false;"> <!-- Disable right-click menu -->
+    <div id="title-screen" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
+        <style>
+            #title-screen {
+                background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(20, 20, 20, 0.98));
+                padding: 40px 60px;
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+                min-width: 300px;
+                text-align: center;
+            }
+            #game-title {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 32px;
+                margin-bottom: 30px;
+                color: #FFD700;
+                text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            }
+            #instructions {
+                font-family: 'Righteous', sans-serif;
+                color: #fff;
+                font-size: 16px;
+                margin: 20px 0;
+                text-align: left;
+                line-height: 1.6;
+            }
+            .instruction-item {
+                margin: 10px 0;
+                color: #AAA;
+            }
+            #start-button {
+                font-family: 'Press Start 2P', cursive;
+                font-size: 16px;
+                padding: 15px 30px;
+                background: linear-gradient(90deg, #ff6b6b, #ff4757);
+                border: none;
+                border-radius: 10px;
+                color: white;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+                margin-top: 20px;
+            }
+            #start-button:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4);
+                filter: brightness(1.1);
+            }
+            #start-button:active {
+                transform: translateY(1px);
+            }
+        </style>
+        <div id="game-title">CHICKEN<br>BOMBER</div>
+        <div id="instructions">
+            <div class="instruction-item">⌨️ Use WASD to move around</div>
+            <div class="instruction-item">🖱️ Click enemies to shoot</div>
+            <div class="instruction-item">⌨️ Press 'E' to drop bombs</div>
+            <div class="instruction-item">💣 Bombs explode after 3 seconds</div>
+            <div class="instruction-item">💀 Shoot enemies to score points</div>
+            <div class="instruction-item">🌊 Avoid water tiles!</div>
+        </div>
+        <button id="start-button">START GAME</button>
+    </div>
     <div id="scene-container"></div>
 </body>
 </html> 
