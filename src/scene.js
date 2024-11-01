@@ -1213,65 +1213,62 @@ export function createScene(container) {
         // Create mobile controls container
         const mobileControls = document.createElement('div');
         mobileControls.style.position = 'fixed';
-        mobileControls.style.bottom = '20px';
-        mobileControls.style.left = '50%';
-        mobileControls.style.transform = 'translateX(-50%)';
+        mobileControls.style.bottom = '40px';
+        mobileControls.style.left = '20px';
         mobileControls.style.display = 'flex';
         mobileControls.style.gap = '20px';
         mobileControls.style.zIndex = '1000';
+        mobileControls.style.pointerEvents = 'auto'; // Ensure controls are clickable
 
         // Create joystick container
         const joystickContainer = document.createElement('div');
-        joystickContainer.style.width = '120px';
-        joystickContainer.style.height = '120px';
-        joystickContainer.style.background = 'rgba(255, 255, 255, 0.2)';
+        joystickContainer.style.width = '150px';
+        joystickContainer.style.height = '150px';
+        joystickContainer.style.background = 'rgba(255, 255, 255, 0.4)'; // Made more visible
         joystickContainer.style.borderRadius = '50%';
         joystickContainer.style.position = 'relative';
-        joystickContainer.style.border = '2px solid rgba(255, 255, 255, 0.3)';
+        joystickContainer.style.border = '4px solid rgba(255, 255, 255, 0.8)'; // Made border more visible
+        joystickContainer.style.boxShadow = '0 0 15px rgba(0,0,0,0.5)';
+        joystickContainer.style.touchAction = 'none'; // Prevent default touch actions
 
         // Create joystick knob
         const joystick = document.createElement('div');
-        joystick.style.width = '50px';
-        joystick.style.height = '50px';
-        joystick.style.background = 'rgba(255, 255, 255, 0.5)';
+        joystick.style.width = '70px';
+        joystick.style.height = '70px';
+        joystick.style.background = 'rgba(255, 255, 255, 0.9)'; // Made more visible
         joystick.style.borderRadius = '50%';
         joystick.style.position = 'absolute';
         joystick.style.left = '50%';
         joystick.style.top = '50%';
         joystick.style.transform = 'translate(-50%, -50%)';
+        joystick.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
+        joystick.style.border = '3px solid rgba(255, 255, 255, 1)'; // Added border
 
         joystickContainer.appendChild(joystick);
         mobileControls.appendChild(joystickContainer);
 
-        // Create shoot button
-        const shootButton = document.createElement('div');
-        shootButton.style.width = '80px';
-        shootButton.style.height = '80px';
-        shootButton.style.background = 'rgba(255, 0, 0, 0.3)';
-        shootButton.style.borderRadius = '50%';
-        shootButton.style.display = 'flex';
-        shootButton.style.alignItems = 'center';
-        shootButton.style.justifyContent = 'center';
-        shootButton.style.border = '2px solid rgba(255, 0, 0, 0.5)';
-        shootButton.innerHTML = '🎯';
-        shootButton.style.fontSize = '30px';
-        mobileControls.appendChild(shootButton);
-
         // Create bomb button
         const bombButton = document.createElement('div');
-        bombButton.style.width = '80px';
-        bombButton.style.height = '80px';
-        bombButton.style.background = 'rgba(255, 255, 0, 0.3)';
+        bombButton.style.position = 'fixed';
+        bombButton.style.right = '20px';
+        bombButton.style.bottom = '40px';
+        bombButton.style.width = '100px';
+        bombButton.style.height = '100px';
+        bombButton.style.background = 'rgba(255, 255, 0, 0.4)';
         bombButton.style.borderRadius = '50%';
         bombButton.style.display = 'flex';
         bombButton.style.alignItems = 'center';
         bombButton.style.justifyContent = 'center';
-        bombButton.style.border = '2px solid rgba(255, 255, 0, 0.5)';
+        bombButton.style.border = '4px solid rgba(255, 255, 0, 0.8)';
+        bombButton.style.boxShadow = '0 0 15px rgba(0,0,0,0.5)';
         bombButton.innerHTML = '💣';
-        bombButton.style.fontSize = '30px';
-        mobileControls.appendChild(bombButton);
+        bombButton.style.fontSize = '40px';
+        bombButton.style.zIndex = '1000';
+        bombButton.style.touchAction = 'none';
 
-        container.appendChild(mobileControls);
+        // Important: Append both controls to the document body
+        document.body.appendChild(mobileControls);
+        document.body.appendChild(bombButton);
 
         // Joystick variables
         let joystickActive = false;
@@ -1280,6 +1277,7 @@ export function createScene(container) {
 
         // Joystick touch handlers
         joystickContainer.addEventListener('touchstart', (e) => {
+            e.preventDefault();
             const touch = e.touches[0];
             const rect = joystickContainer.getBoundingClientRect();
             joystickCenter.x = rect.left + rect.width / 2;
@@ -1290,6 +1288,7 @@ export function createScene(container) {
 
         document.addEventListener('touchmove', (e) => {
             if (joystickActive) {
+                e.preventDefault();
                 updateJoystickPosition(e.touches[0]);
             }
         });
@@ -1306,7 +1305,7 @@ export function createScene(container) {
         function updateJoystickPosition(touch) {
             const dx = touch.clientX - joystickCenter.x;
             const dy = touch.clientY - joystickCenter.y;
-            const distance = Math.min(35, Math.sqrt(dx * dx + dy * dy));
+            const distance = Math.min(40, Math.sqrt(dx * dx + dy * dy));
             const angle = Math.atan2(dy, dx);
             
             const x = Math.cos(angle) * distance;
@@ -1315,26 +1314,49 @@ export function createScene(container) {
             joystick.style.left = `calc(50% + ${x}px)`;
             joystick.style.top = `calc(50% + ${y}px)`;
             
-            joystickPosition.x = x / 35;
-            joystickPosition.y = y / 35;
+            joystickPosition.x = x / 40;
+            joystickPosition.y = y / 40;
         }
 
-        // Shoot button handler
-        shootButton.addEventListener('touchstart', () => {
-            isMouseDown = true;
-            lastMouseEvent = { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 };
-        });
-
-        shootButton.addEventListener('touchend', () => {
-            isMouseDown = false;
-            lastMouseEvent = null;
-        });
-
         // Bomb button handler
-        bombButton.addEventListener('touchstart', () => {
+        bombButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
             if (chickie && eggs.length < maxEggs) {
                 createBomb(chickie.position.clone());
                 updateUI();
+            }
+        });
+
+        // Handle shooting with screen taps
+        container.addEventListener('touchstart', (e) => {
+            // Ignore if touch is on controls
+            if (e.target === joystick || e.target === joystickContainer || e.target === bombButton) {
+                return;
+            }
+
+            const touch = e.touches[0];
+            mouse.x = (touch.clientX / container.clientWidth) * 2 - 1;
+            mouse.y = -(touch.clientY / container.clientHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            if (raycaster.ray.intersectPlane(clickPlane, intersectPoint)) {
+                const direction = new THREE.Vector3();
+                direction.subVectors(intersectPoint, chickie.position);
+                direction.y = 0;
+                direction.normalize();
+
+                const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+                bullet.position.copy(chickie.position);
+                bullet.position.y = 0.5;
+                bullet.userData.direction = direction;
+                bullet.userData.spawnTime = Date.now();
+
+                const bulletLight = new THREE.PointLight(0x00ff44, 1, 3);
+                bullet.add(bulletLight);
+
+                scene.add(bullet);
+                bullets.push(bullet);
             }
         });
 
