@@ -8,7 +8,7 @@ import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 export function createScene(container) {
     // Scene setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
+    scene.background = new THREE.Color(0x000000);
 
     // Add this code to handle the start button
     const titleScreen = document.getElementById('title-screen');
